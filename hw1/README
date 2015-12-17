@@ -1,0 +1,199 @@
+This directory contains code which would create a Linux kernel module which when loaded into Linux,will support a new system call called 				   _____________________________________________________	
+						|													  |
+						|	sys_xcrypt(infile,outfile,keybuf,keylen,flags)    |
+						|_____________________________________________________|
+
+
+where
+		 "infile" is the name of an input file to encrypt or decrypt, 
+		 "outfile" is the output file, 
+		 "keybuf" is a buffer holding the cipher key, 
+		 "keylen" is the length of that buffer, and 
+		 "flags" determine if you're encrypting or decrypting.
+
+Encryption/Decryption operation to be performed is determined by the low bit of the flags (LSB). If the flag is set to 1, we should encrypt the infile. If it is 0, we should decrypt the file.
+
+
+Return Value of the system call:
+On success, it returns 0. 
+I have tried to display custom error messages in case of some specific failures pertaining to my use case :
+
+EPERM  => Operation being performed is not permitted
+ENOENT => No such file or directory
+EFAULT => Bad Address
+EROFS => Read only File System
+ENAMETOOLONG => The input/output file name path provided is too long
+EMSGSIZE => Passphrase is too long
+				
+
+
+										___________________
+									   |				   |
+									   |	SOURCE FILES   |
+									   |___________________|
+
+
+
+This repository contains the following source files. Please check the below description for more details :
+1) xcipher.c : 
+			
+			This is the user level application program which invokes the xcrypt() system call.
+			I have created a user-level structure for parsing the command-line options specified by the user.
+			I used the following reference http://man7.org/linux/man-pages/man3/getopt.3.html and http://www.gnu.org/software/libc/manual/html_node/Example-of-Getopt.html for learning more about the getopt() 
+			command in c.
+			I have also used the MD5 API provided in the openssl library in C to generate the MD5 hash to be passed in the kernel space. 
+			Reference : 
+			https://www.openssl.org/docs/manmaster/crypto/md5.html.
+			http://www.askyb.com/cpp/openssl-md5-hashing-example-in-cpp/
+
+
+2) sys_xcrypt.h : 
+			
+			This file consists of the header files and the declarations that will be used across user and kernel space.These declarations are needed for making the system call. The user level code must include this header before invoking the system call. 
+
+
+3) sys_xcrypt.c : 
+			
+			This is the system call implementation that is implemented as the loadable kernel module. The function pointer which is burned to the kernel code is made to point to a function in this module which does encrypt/decrypt. In this way we are hooking the system call to the loadable kernel module.
+			NOTE: This file consists of source code copied from /net/ceph/crypto.c. I have studied and copied the code for ceph_aes_encrypt() and ceph_aes_decrypt() and modified the input parameters to make it work to perform encryption for the CTR mode of AES encryption.
+
+
+
+4) Makefile : 
+			
+			This file contains commands for compiling the user level code using gcc and making the loadable kernel module. This file contains the comprehensive list of all the programs that need to be compiled for execution. Once the "make" command is issued from the command line it automatically compiles all the static kernel code, loadable kernel module and the user-level program all at once. After compilation following files are generated :
+
+			(i) xcipher:executable file which is used by the user for running the application
+
+			(ii) sys_xcrypt.o: object file created as a result of compiling sys_xcrypt.c
+
+			(iii)sys_xcrypt.ko: This is an object file which contains necessary data structures needed by kernel to load the module.
+
+			(iv)intermediatery files-modules.symvers and modules.order
+
+			As I had used the openssl library for generating MD5 hash I was getting "undefined reference to MD5" while compiling the code. I had to include two library linker flags -lssl -lcrypto for successful compilation.
+			Reference:
+			http://stackoverflow.com/questions/14295980/md5-reference-error
+
+5) kernel.config :
+			
+			After repeated failed attempts, I have tried to minimize the kernel configuration to suit my requirements. I did make menuconfig and utilized the information given by Professor Zadok on the link http://www3.cs.stonybrook.edu/~ezk/cse506-f15/lab.html#vmware to perform this task. As mentioned, I have tried to remove support for SMP, SCSI, NFS Devices, PCMCIA, AGP, Kernel Automounter and NFS server (in File Systems), Sound cards, and USB.
+
+
+											___________________________________
+										   |								   |
+										   |  Executing the User Application   |
+										   |___________________________________|
+
+
+The following is the way to invoke the system call from the user space :
+
+		Usage : ./xcipher {-e|-d} [-c ARG] {-p PASSWORD} [-h HELP] inputFile outputFile 
+		{-e|-d} 	  : Use this options to specify whether you want to encrypt or decrypt the inputfile
+		[-c ARG]      : Optional Argument. This option specifies the cipher Algorithm which you want to use for Encryption.The 						default encryption method used is AES
+		{-p PASSWORD} : This option is used to specify the password. E.g. -p 'password123' 
+		[-h]  		  : Used to display the help message to outline the process on how to use the file
+		inputfile 	  : specifies the inputfile to be encrypted/decrypted (with the path name) 
+		outputfile    : specifies the outputfile to be encrypted/decrypted (with the path name)
+
+
+											___________________________________
+										   |								   |
+										   |    FORMAT of the ENCRYPTED file   |
+										   |___________________________________|
+
+0       PREAMBLE   				16               		        48
+-----------------------------------------------------------------
+| KEY(MD5 hashed and encrypted) | 		CIPHER TEXT 			 |
+-----------------------------------------------------------------
+
+The password validation for the decryption is performed in the following way :
+
+1) The first portion, equivalent to the AES_BLOCK_SIZE is read from the Encrypted File and is decrypted and its value is compared with the HASHED value of the password entered by the user.
+2) If the validation is successful, the decryption is performed on the cipher text and the decrypted is stored in the output file.
+   Otherwise, an error message is returned to the user intimating about the password mismatch.
+
+   											___________________________________
+										   |								   |
+										   |    	   HOW IT WORKS   		   |
+										   |___________________________________|
+
+
+1) The user compiles and executes the user level code, using the below command: 
+"Usage : %s {-e|-d} [-c ARG] {-p PASSWORD} [-h HELP] inputFile outputFile"
+
+2) The program performs the command-line option validations. It generates an MD5 hash of the password entered by the user and populates the other details of the structure to be passed to the kernel space. 
+
+3) The program then performs the system call xcrypt().
+
+4) Once the control reaches the kernel space. The kernel performs validation on the userlevel pointers. If successful, then it 
+   allocates physical memory to the structure and copies the data from the user space to the kernel space using copy_from_user(3)
+   command called in the transportUserDataToKernel(2) function.
+
+5) Now MD5 HASH of the password entered by the user is calculated for validation in the decryption operation. I studied the   ecryptfs_calculate_md5(3) function in the linux/fs/ecryptfs/crypto.c and modified code to fit my requirements.
+Reference for calculating MD5 in the kernel space:
+http://lxr.free-electrons.com/source/fs/ecryptfs/crypto.c
+
+
+6) Now the input/output file are opened in the required modes. I studied and copied the source-code from the wrapfs_read_file(2) and wrapfs_write_file(2) functions mentioned in hw1.txt for file-handling. 
+
+Reference for file handling:
+http://www3.cs.stonybrook.edu/~ezk/cse506-f15/hw1.txt
+http://rz2.com/man9/filp_open.9.html
+http://www.ouah.org/mammon_kernel-mode_read_hack.txt
+http://lxr.free-electrons.com/source/fs/open.c#L984
+
+I have covered the following use cases :
+
+i)   Check if the input/output file have the required access priviliges and if both are a regular file. If not, the program returns 	 with the approprite error message. 
+
+ii)  If the input file and the output file are the same :
+	 The behavior is that the user is reported about the two files being the same and the program exits.
+
+iii) If the input/output file are symbolic links or hardlinks pointing to the same underlying file:
+	 The user is informed about the two underlying files being the same and the program exits.
+ 
+
+											___________________________________
+										   |								   |
+										   |    	   TEMPORARY FILE  		   |
+										   |___________________________________|
+
+
+
+If the validation goes fine, a temporary file is created with the name <outputfile>.tmp. Using the LSB of the encryption/decryption flag passed by the user, I perform either the encryption/decryption operation. 
+
+
+For encryption, the MD5 hashed password(computed in step 5) is sent to the functionToEncrypt(6) which writes the encrypted password in the buffer which is later written to the temporary file.
+Now, the input file is read in chunks of length equal to PAGE_SIZE.This is then passed to the functiontoencrypt(6) which encrypts the buffer in blocks of the AES_BLOCK_SIZE(16 bytes), and writes the result to the temporary file.
+
+For decryption, the first 16 bytes of data is read from the input(encrypted) file. This encrypted chunk is sent to the functionToDecrypt(6) which writes the decrypted version in the buffer which is then compared with the hashed password computed earlier(step 5). 
+In case, there is a match, we proceed with encryption. Otherwise, an appropriate error is thrown regarding the passphrase mismatch.
+
+In case of a password mismatch:
+1)  If the output file exists it remains intact and the temporary file is unlinked.
+2)  If the output file did not exists earlier, both the temporary and the created output file are unlinked.
+
+Once the operation completes successfully, the TEMPORARY file IS RENAMED as the new output file. 
+
+For unlinking and renaming of the files I have used the vfs_unlink(3) and vfs_rename(6) functions. I studied the below links for more information on their usage.
+
+Reference : 
+https://www.kernel.org/doc/htmldocs/filesystems/API-vfs-rename.html
+https://www.kernel.org/doc/htmldocs/filesystems/API-vfs-unlink.html 
+
+
+The advantages of using the temporary file are manyfold.
+
+1)  In case, the output file happens to already contain more data than it is written into, this approach does not allow partially 	    written data and the output file only contains new data. This behavior is analogous to the /bin/cp command.
+2)  In case of a partial read/write the contents of the original file remain intact and the temporary file is unlinked with no trace 	 behind. This ensures atomicity in operations.
+
+
+
+
+
+
+
+
+
+
