@@ -1,1 +1,0 @@
-cmd_/usr/src/hw1-sogupta/hw1/sys_xcrypt.ko := ld -r -m elf_i386 -T ./scripts/module-common.lds   -o /usr/src/hw1-sogupta/hw1/sys_xcrypt.ko /usr/src/hw1-sogupta/hw1/sys_xcrypt.o /usr/src/hw1-sogupta/hw1/sys_xcrypt.mod.o
