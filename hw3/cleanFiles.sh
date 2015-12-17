@@ -1,1 +1,0 @@
-rm -rf outfile_*
