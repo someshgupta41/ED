@@ -1,8 +1,6 @@
 This directory contains code which would create a Linux kernel module which when loaded into Linux,will support a new system call called 				   _____________________________________________________	
-						|													  |
-						|	sys_xcrypt(infile,outfile,keybuf,keylen,flags)    |
-						|_____________________________________________________|
-
+						
+						sys_xcrypt(infile,outfile,keybuf,keylen,flags)    
 
 where
 		 "infile" is the name of an input file to encrypt or decrypt, 
@@ -26,12 +24,7 @@ ENAMETOOLONG => The input/output file name path provided is too long
 EMSGSIZE => Passphrase is too long
 				
 
-
-										___________________
-									   |				   |
-									   |	SOURCE FILES   |
-									   |___________________|
-
+			   	SOURCE FILES
 
 
 This repository contains the following source files. Please check the below description for more details :
@@ -80,11 +73,7 @@ This repository contains the following source files. Please check the below desc
 			After repeated failed attempts, I have tried to minimize the kernel configuration to suit my requirements. I did make menuconfig and utilized the information given by Professor Zadok on the link http://www3.cs.stonybrook.edu/~ezk/cse506-f15/lab.html#vmware to perform this task. As mentioned, I have tried to remove support for SMP, SCSI, NFS Devices, PCMCIA, AGP, Kernel Automounter and NFS server (in File Systems), Sound cards, and USB.
 
 
-											___________________________________
-										   |								   |
-										   |  Executing the User Application   |
-										   |___________________________________|
-
+			Executing the User Application 
 
 The following is the way to invoke the system call from the user space :
 
@@ -95,29 +84,14 @@ The following is the way to invoke the system call from the user space :
 		[-h]  		  : Used to display the help message to outline the process on how to use the file
 		inputfile 	  : specifies the inputfile to be encrypted/decrypted (with the path name) 
 		outputfile    : specifies the outputfile to be encrypted/decrypted (with the path name)
-
-
-											___________________________________
-										   |								   |
-										   |    FORMAT of the ENCRYPTED file   |
-										   |___________________________________|
-
-0       PREAMBLE   				16               		        48
------------------------------------------------------------------
-| KEY(MD5 hashed and encrypted) | 		CIPHER TEXT 			 |
------------------------------------------------------------------
-
+		   
 The password validation for the decryption is performed in the following way :
 
 1) The first portion, equivalent to the AES_BLOCK_SIZE is read from the Encrypted File and is decrypted and its value is compared with the HASHED value of the password entered by the user.
 2) If the validation is successful, the decryption is performed on the cipher text and the decrypted is stored in the output file.
    Otherwise, an error message is returned to the user intimating about the password mismatch.
 
-   											___________________________________
-										   |								   |
-										   |    	   HOW IT WORKS   		   |
-										   |___________________________________|
-
+				HOW IT WORKS 
 
 1) The user compiles and executes the user level code, using the below command: 
 "Usage : %s {-e|-d} [-c ARG] {-p PASSWORD} [-h HELP] inputFile outputFile"
@@ -154,11 +128,7 @@ iii) If the input/output file are symbolic links or hardlinks pointing to the sa
 	 The user is informed about the two underlying files being the same and the program exits.
  
 
-											___________________________________
-										   |								   |
-										   |    	   TEMPORARY FILE  		   |
-										   |___________________________________|
-
+			   TEMPORARY FILE
 
 
 If the validation goes fine, a temporary file is created with the name <outputfile>.tmp. Using the LSB of the encryption/decryption flag passed by the user, I perform either the encryption/decryption operation. 
