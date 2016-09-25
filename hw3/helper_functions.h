@@ -19,7 +19,7 @@
 #define MAXIMUM_BUFFER_SIZE 4095
 #define SHA1_SIGNATURE_LENGTH 20
 
-char *aes_iv  =  "alpitkumarguptaa";
+char *aes_iv  =  "someshkumargupta";
 
 int functionToEncrypt (const void *key,   int key_len, void *dst, size_t *dst_len, const void *src, size_t src_len)
  {
